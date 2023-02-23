@@ -1,0 +1,22 @@
+步骤：
+a.在主 Maven 工程中创建一个新的 Module 工程，命名为 eureka-client，该工程作为 Eureka Client 的工程向服务注册中心 Eureka server 注册。
+eureka-client 工程创建完之后，在其pom文件中引入相关的依赖，其pom文件继承了主工程pom文件，
+并且需要引入 Eureka Client客户端所需的依赖 spring-cloud-starter-eureka ，引入 Web 功能的起步依赖 spring-boot starter-web,以及 Spring Boot 测试的起步依赖 spring-boot-starter-test.
+b.在工程的配置文件 application.yml 做Eureka Client 客户端的相关配置，
+配置了程序名为eureka-client ，程序端口为 8762 ，服务注册地址为 http://localhost:8761/eureka/
+application.yml配置代码中， defaultZone 为默认的 Zone ，来源 AWS 的概念 。区域（ Region ）和可用区（ Avai lability Zone, AZ ）是 AWS 的另外两个概念。
+区域是指服务器所在的区域，比如北美洲、南美洲、欧洲和亚洲 ，每个区域一般由多个可用区组成。在本案例中 defaultZone是指Eureka Server 的注册地址。
+c.在程序的启动 EurekaClientApplication 加上注解@EnableEurekaClient 开启 Eureka Client 功能.
+d.启动 Eureka Client 工程,启动成功之后,在控制台会打印 出如下信息:
+com.netflix.discovery.DiscoveryClient: DiscoveryClient_EUREKA-CLIENT/bogon: eureka -client:8762 - registration status: 204
+以上的日志信息说明 Eureka Client 客户端已经向 Eureka Server 注册了。
+e.在浏览器上打开Eureka Server 主页 即：http://localhost:8761
+在主页上 Instances currently registered with Eureka 项中己经有一个实例被注册，Application EUREKA-CLIENT, Staus UP （在线） 端口为 8762 。
+这就说明 Eureka Client己成功向 Eureka Server注册.
+      Application	    AMIs	    Availability Zones	    Status
+      EUREKA-CLIENT	n/a (1)	    (1)	                    UP (1) - localhost:eureka-client:8762
+f.在eureka-client 工程中写一个API接口。
+新建一个类 HiController，在 HiController 类加上 @RestController 注解，开启 RestController 功能。
+@GetMapping 注解表明是 Get 请求，其请求地址映射为"/hi"，其中@Value("${server.port}")向配置文件读取配置中的端口信息。
+在浏览器上访问 http://localhost:8762/hi?name=eureka-client
+浏览器显示如下的信息：hi eureka-client,port:8762

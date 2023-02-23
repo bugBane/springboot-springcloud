@@ -1,0 +1,15 @@
+8.使用 Turbine 聚合监控
+在使用 Hystrix Dashboard 组件监控服务的熔断器状况时， 每个服务都有 Hystrix Dashboard 主页，当服务数量很多时，监控非常不方便。
+为了同时监控多个服务的熔断器的状况， Netflix 开源了 Hystrix 的另一个组件 Turbine Turbine 用于聚合多个 Hystrix Dashboard,将多个 Hystrix Dashboard 组件的数据放在一个页面上展示，进行集中监控。
+a.在主 Maven 工程下新建 Module 工程，做为 Turbine 聚合监控的工程，取名为 eureka-monitor-client 。
+首先,在工程的 pom 文件引入工程所需的依赖，包括 turbine 、actuator 和 test 的起步依赖。
+b.然后在工程的配置文件 application 上相关的配置
+c.上述配置代码指定了工程的端口 8769 ，服务名为 service-turbine。
+turbine.aggregator.clusterConfig 配置了需要监控的服务名，如本例中的 eureka-ribbon-client 和 eureka-feign-client.
+clusterNameExpression 默认为服务名的集群，此时用默认的即可。
+turbine.aggregator.clusterConfig可以不写，因为默认就是 default 。
+最后指定了服务注册中心的地址为 http://ocalhost:8761/eureka/
+d.启动工程 eureka-server、eureka-client、eureka-ribbon-client、eureka-monitor-client
+在浏览器上访问 即：http://localhost:8764/hi?name=eureka-ribbon-client 和 即：http://localhost:8765/hi?name=eureka-feign-client
+在浏览器上 网址 http: //localhost:8765/hystrix ，这个界面为 Hystrix Dashboard 界面。
+    在界面上依次输入监控流 Url 地址 http://localhost:8766/turbine.stream 、监控时间间隔 2000 毫秒 和title 单击 monitor ”，

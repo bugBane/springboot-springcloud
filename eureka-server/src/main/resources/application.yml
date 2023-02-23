@@ -1,0 +1,4 @@
+# application.yml 思路:单机single配置
+spring:
+  profiles:
+    active: @profiles.active@

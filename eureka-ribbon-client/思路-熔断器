@@ -1,0 +1,83 @@
+1.Hystrix 是什么？
+在分布式系统中，服务与服务之间的依赖错综复杂， 一种不可避免的情况就是某些服务出现故障，导致依赖于它们的其他服务出现远程调度的线程阻塞。
+Hystrix 是 Netflix 公司开源的一个项目，它提供了熔断器功能，能够阻止分布式系统中出现联动故障。
+Hystrix 是通过隔离服务的访问点阻止联动故障的，并提供了故障的解决方案，从而提高了整个分布式系统的弹性。
+
+2.解决了什么问题？
+在复杂的分布式系统中，可能有几十个服务相互依赖，这些服务由于某些原因，例如机房的不可靠性、网络服务商的不可靠性，导致某个服务不可用 如果系统不隔离该不可用的服
+务，可能会导致整个系统不可用。
+例如，对于依赖 30 个服务的应用程序，每个服务的正常运行时间为 99.99% ，对于单个服务来说， 99.99% 的可用是非常完美的。
+99.99^30 = 99.7% 的可正常运行时间和 0.3% 的不可用时间，那么 10 亿次请求中有 3000000 次失败，实际的情况可能比这更糟糕。
+如果不设计整个系统的韧性，即使所有依赖关系表现良好，单个服务只有 0.01% 的不可用，由于整个系统的服务相互依赖，最终对整个系统的影响是非常大的。
+在微服务系统中，一个用户请求可能需要调用几个服务才能完成。
+在所有的服务都处于可用状态时， 一个用户请求需要调用 A、H、I和 P 服务，当某个服务，例如 I 服务 ，出现网络延迟或者故障时，
+即使服务A、H、P可用，由于 I 服务的不可用，整个用户请求会处于阻塞状态，并等待服务 I 的响应。
+在高并发的情况下，单个服务的延迟会导致整个请求都处于延迟状态，可能在几秒钟就使整个服务处于线程负载饱和的状态。
+某个服务的单个点的请求故障会导致用户的请求处于阻塞状态，最终的结果就是整个服务的线程资源消耗殆尽。由于服务的依赖性，会导致依赖于该故障服务的其他服务也处于线程阻
+塞状态，最终导致这些服务的线程资源消耗殆尽 直到不可用，从而导致整个服务系统都不可用，即雪崩效应。
+为了防止雪崩效应，因而产生了熔断器模型。Hystrix 是在业界表现非常好的一个熔断器模型实现的开源组件，它是 Spring Cloud 组件不可缺少的一部分。
+
+3.Hystrix 的设计原则
+a.防止单个服务的故障耗尽整个服务的 Servlet 容器（例如 Tomcat ）的线程资源。
+b.快速失败机制，如果某个服务出现了故障，则调用该服务的请求快速失败，而不是线程等待。
+c.提供回退（ fallback ）方案，在请求发生故障时，提供设定好的回退方案。
+d.使用熔断机制，防止故障扩散到其他服务。
+e.提供熔断器的监控组件 Hystrix Dashboard ，可以实时监控熔断器的状态
+
+4.Hystrix 的工作机制
+a.首先，当服务的某个 API 接口的失败次数在一定时间内小于设定的阀值时，熔断器处于关闭状态，该 API 接口正常提供服务 。
+b.当该 API 接口处理请求的失败次数大于设定的阀值时， Hystrix 判定该 API 接口出现了故障，打开熔断器，这时请求该 API 接口会执行快速失败的逻辑（即 fall back 回退的逻辑），不执行业
+务逻辑，请求的线程不会处于阻塞状态。
+c.处于打开状态的熔断器过一段时间后会处于半打开状态，并将一定数量的请求执行正常逻辑。剩余的请求会执行快速失败，若执行正常逻辑的请求失败了，则熔断器继续打开。
+d.若成功了 ，则将熔断器关闭。这样熔断器就具有了自我修复的能力。
+
+5.在 RestTemplate 和 Ribbon 上使用熔断器
+在 eureka-ribbon-client 工程中，我们使用 RestTemplate 调用了 eureka-client 的“/hi” API 接口,并用 Ribbon 做了负载均衡，本节在此基础上 Hystrix 熔断器的功能。
+a.首先在工程的 pom 文件中引用 Hystrix 的起步依赖 spring-cloud-starter-hystrix
+b.然后在 Spring Boot 启动类 EurekaRibbonClientApplication 上@EnableHystrix 注解开启 Hystrix 熔断器功能.
+c.修改 RibbonService 的代码， hi()方法上加 @HystrixCommand 注解。
+有了 @HystrixCommand 注解， hi() 方法就启用 Hystrix 熔断器的功能， 其中 fallbackMethod 为处理回退（ fallback ）逻辑的方法。
+在本例中，直接返回了一个字符串。在熔断器打开的状态下，会执行 fall back 逻辑。fall back 的逻辑最好是返回一些静态的字符串，不需要处理复杂的逻辑，
+也不需要远程调度其他服务，这样方便执行快速失败，释放线程资源。如果一定要在 fallback 逻辑中远程调度其他服务，最好在远程调度其他服务时，也加上熔断器。
+d.依次启动工程 eureka-server、eureka-client、eureka-ribbon-client 。等所有的工程都启动完毕，
+在浏览器上访问 即：http://localhost:8764/hi
+结果：hi cloud,port:8762
+e.关闭 eureka-client ，即处于不可用的状态，此时 eureka-ribbon-client 无法调用 eureka-client 的 "/hi" 接口
+在浏览器上访问 即：http://localhost:8764/hi
+结果：hi,cloud,hystrix: sorry error!
+
+6.在 Feign 上使用熔断器
+a.由于 Feign 的起步依赖中已经引入了 Hystrix 的依赖，所以在 Feign 中使用 Hystrix 不需要引入任何的依赖，
+只需要在 eureka-feign-client 工程的配置文件 application.yml 中配置开启Hystrix 的功能，配置文 application.yml 中加以下配置：
+    feign:
+      hystrix:
+        enabled: true
+b.然后修改 eureka-feign-client 工程中的 EurekaClientFeign 代码，在 @FeignClient 注解的fall back 速失败的处理类。
+该处理类是作为 Feign 熔断器的逻辑处理类，必须被@FeignClient 修饰的接口。
+例如案例中的 HiHystrix 类实现了接口 EurekaClientFeign，最后需要以 Spring Bean 形式注入 IoC 容器中。
+c. HiHystrix 作为熔断器的逻辑处理类， 需要实现 EurekaClientFeign 接口，并需要在接口方法sayHiFromClientEureka()里写处理熔断的具体逻辑，
+同时还需要在 iHystrix 类上加 @Component 注解，注入 IoC 容器中。
+d.依次启动工程 eureka-server、eureka-client、eureka-feign-client
+在浏览器上访问 即：http://localhost:8765/hi
+结果：hi cloud,port:8762
+e.关闭 eureka-client ，即处于不可用的状态，此时 eureka-feign-client 无法调用 eureka-client 的 "/hi" 接口
+在浏览器上访问 即：http://localhost:8765/hi
+结果：hi,cloud,hystrix: sorry error!
+
+7.使用 Hystrix Dashboard 监控熔断器的状态
+在微服务架构中 ，为了保证服务实例的可用性，防止服务实例出现故障导致线程阻塞，而出现了熔断器模型 烙断器的状况反映了 个程序的可用性和健壮性，它是重要指标
+Hystrix Dashboard 是监控 Hystrix 的熔断器状况的一个组件，提供了数据监控和友好的图形化展示界面。
+
+A.在RestTemplate 中使用 Hystrix Dashboard
+a.首先在 eureka-ribbon-client 工程 porn 文件上加上 Actuator 的起步依赖、 Hystrix Dashboard 的起步依赖和 Hystrix 起步依赖，这3个依赖是必需的。
+b.在程序的启动类 EurekaRibbonClientApplication 加上 @EnableHystrixDashboard 开启 Hystrix Dashboard 的功能
+c.依次启动工程 eureka-server、eureka-client、eureka-ribbon-client 。
+在浏览器上访问 http://localhost: 8764/hi
+然后在浏览器上访问 http://localhost:8764/hystrix.stream 浏览器上会显示熔断器的数据指标
+在浏览器上访问 即：http://localhost:8764/hystrix,在界面上依次填写 http://localhost:8764/hystrix.stream、2000、cloud（这个可以随意填写）单击“ monitor ”，进入页面
+
+B.在Feign中使用 Hystrix Dashboard
+a.同 eureka-ribbon-client 类似， eureka-feign-client 工程 pom 文件 要加 Actuator、Hystrix、Hystrix Dashboard 的起步依赖。
+可能有读者会疑惑： Feign 自带 Hystrix 吗？为什么还需要加入 spring-cloud-starter-hystrix ？这是因为 Feign 自带的 Hystrix 的依赖不是起步依赖。
+b.需要在程序 EurekaFeignClientApplication 加上注解 @EnableHystrixDashboard 和 @EnableHystrix 开启 HystrixDashboard 的功能。
+c.与RestTemplate一样测试

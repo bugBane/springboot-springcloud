@@ -1,0 +1,144 @@
+1.Eureka 是什么？
+Eureka 是一个用于服务注册和发现的组件， 最开始主要应用于亚马逊公司旗下的 服务平台 AWS.
+Eureka 分为 Eureka Server 和 Eureka Client,Eureka Server 为Eureka服务注册中心， Eureka Client 为 Eureka 客户端
+
+2.Eureka 为什么？
+Spring Cloud 中，可选择 Consul Zookeeper Eureka 作为服务注册和发现的组件，那为什么要选择 Eureka 呢？
+a.首先， Eureka 完全开源，是 Netflix 公司的开源产品 经历了 Netflix 公司的生产环境的考验，以及3年时间的不断迭代，在功能和性能上都非常稳定，可以放心使用.
+b.其次， Eureka 是 Spring Cloud 首选推荐的服务注册与发现组件，与 Spring Cloud 其他组件可以无缝对接。
+c.最后， Eureka 和其他组件，比如负载均衡组件 Ribbon 熔断器组件 Hystrix、熔断器监控组Hystrix Dashboard 组件、
+熔断器聚合监控 Turbine 组件，以及网关 Zuul 组件相互配合，能够很容易实现服务注册、负载均衡、熔断和智能路由等功能.这些组件都是由 Netflix 公司开源的，
+一起被称为 Netflix OSS 组件。 Netflix OSS 组件由 Spring Cloud 整合为 Spring Cloud Netflix 组件，它是 Spring Cloud 构架微服务的核心组件，也是基础组件。
+
+3.Eureka 的基本架构
+Eureka 的基本架构主要包括以下3种角色。
+    Register Service ：服务注册中心，它是一个 Eureka Server ，提供服务注册和发现的功能。
+    Provider Service ：服务提供者，它是 Eureka Client ，提供服务.
+    Consumer Service ：服务消费者，它是 Eureka Cient ，消费服务.
+服务消费的基本过程如下：首先前要一个服务注册中心 Eureka Server ，服务提供 Eureka Client 向服务注册中心 Eureka Server 注册，
+将自己的信息（比如服务名和服务的 IP 地址等）通过REST API的形式提交给服务注册中心 Eureka Server 。
+同样 ，服务消费 Eureka Client也向服务注册中心 Eureka Server 注册，同时服务消费者获取一份服务注册列表的信息，
+该列表包含了所有向服务注册中心 Eureka Server 注册的服务信息。获取服务注册列表信息之后，服务消费者就知道服务提供者的 IP 地址，
+可以通过 Http 远程调度来消费服务提供者的服务。
+
+4.如何使用？
+a.创建主maven项目 springcloud-main，配置pom文件控制java版本和springcloud版本
+b.创建一个Module工程 eureka-server，采用Spring Initializr的方式构建，作为服务注册中心Eureka Server工程
+c.在eureka-server工程的pom文件引入相关依赖，包括继承主maven工程的pom文件，
+引入Eureka Server的起步依赖spring-cloud-starter-eureka-server，以及 Spring Boot 起步依spring-boot-starter-test 。
+最后还引入 Spring Boot 的 Maven 插件 spring-boot-maven-plugin 有了该插件可使用 Maven 插件的方式来启动 Spring Boot 工程。
+d.在工程的配置文件application.yml 中做程序的相关配置。
+首先通过server.port指定 Eureka Server 端口为 8761。 在默认情况下， Eureka Server 会向自己注册，这时 需要配置
+eureka.client.registerWithEureka 和 eureka.client.fetchRegistry 为false ，防止自己注册自己。看配置文件application.yml所示。
+e.在工程的启动类 EurekaServerApplication 加上注解@EnableEurekaServer 开启 Eureka Server 的功能。
+f.到目前为止，Eureka Server的所有搭建工作已经完成，启动程序启动类 EurekaServerApplication的main方法，启动程序。
+在浏览器上访问 Eureka Server 主界面 ：http://localhost:8761
+在界面上的 Instances currently registered with Eureka 项上没有任何注册的实例，没有是正常的，因为还没有 Eureka Client客户端向注册中心Eureka Server注册实例
+g.编写eureka-client工程，详情见eureka-client思路。
+
+5.源码解析
+~~概念
+(l) Register --服务注册
+当Eureka Client 向 Eureka Server 注册时 Eureka Client 提供自身的元数据，比如 IP 地址、端口、运行状况指标的Url、主页地址等信息。
+(2) Renew --服务续约
+Eureka client 在默认的情况下会每隔 30 秒发送一次心跳来进行服务续约。通过服务续约来告知 Eureka Server 该Eureka Client 仍然可用，没有出现故障。
+正常情况下，如果 Eureka Server 在 90 秒内没有收到 Eureka Client 的心跳， Eureka Server 会将 Eureka Client 实例从注册列表中删除。注意：官网建议不要更改服务续约的间隔时间。
+(3) Fetch Registries --获取服务注册列表信息
+Eureka Client 从 Eureka Server 获取服务注册表信息，并将其缓存在本地。 Eureka Client 使用服务注册列表信息查找其他服务的信息，从而进行远程调用。
+该注册列表信息定时（每30秒） 更新一次，每次返回注册列表信息可能与 Eureka Client 的缓存信息不同， Eureka Client会自己处理这些信息。
+如果由于某种原因导致注册列表信息不能及时匹配， Eureka Client 会重新获取整个注册表信息。
+Eureka Server 缓存了所有的服务注册列表信息，并将整个注册列表以及每个应用程序的信息进行了压缩，压缩内容和没有压缩的内容完全相同。
+Eureka Client 和 Eureka Server 可以使用 JSON 和 XML 数据格式进行通信。在默认的情况下， Eureka Client 使用 JSON 格式的方式来获取服务注册列表的信息。
+(4) Cancel --服务下线
+Eureka Client 在程序关闭时可以向 Eureka Server 发送下线请求。发送请求后，该客户端的实例信息将从 Eureka Server 的服务注册列表中删除。
+该下线请求不会自动完成，需要在程序关闭时调用以下代码：
+DiscoveryManager.getInstance().shutdownComponent();
+(5) Eviction --服务剔除
+在默认情况下，当 Eureka Client 连续 90 秒没有向 Eureka Server 发送服务续约（即心跳〉时， Eureka Server 会将该服务实例从服务注册列表删除，即服务剔除。
+~~ Eureka 的高可用架构
+在这个架构中有两个角色 ，即 Eureka Server 和 Eureka Client.而 Eureka Client 又分为 Application Service 和 Application Client ，即服务提供者和服务消费者。
+每个区域有一个 Eureka 集群，并且每个区域至少有一个 Eureka Server 可以处理区域故障，以防服务器瘫痪。
+Eureka Client 向 Eureka Server 注册， 将自己的客户端信息提交给 Eureka Server 然后，Eureka Client 通过向 Eureka Server 发送心跳 （每 30s 一次）来续约服务。
+如果某个客户端不能持续续约，那 Eureka Server 断定该客户端不可用，该不可用的客户端将在大约 90 秒后从 Eureka Server 服务注册列表中删除。
+服务注册列表信息和服务续约信息会被复制到集群中的每个 Eureka Serve 节点。来自任何区域 Eureka Client 都可以获取整个系统的服务注册列表信息。
+根据这些注解列表信息， Application Client 可以远程调用 Application Service 来消费服务。
+
+A.Register服务注册
+客户端：
+服务注册，即 Eureka Client 向 Eureka Server 提交自己 服务信息 包括 IP 地址、 端口、ServiceId 等信息。
+Eureka Client 配置文件中没有配置 ServiceId ，则默认为配置文件中配置的服务名 ，即${spring.application.name}的值。
+Eureka Client 启动时，会将自身的服务信息发送到 Eureka Server 这个过程其实非常简单，现在来从源码的角度分析服务注册的过程。
+在工程的 Maven 的依赖包下，找到 eureka-client-1.6.2.jar 包。在 com.netflix.discovery 包下有 DiscoveryClient 类，该类包含了
+Eureka Client 向 Eureka Server 注册的相关方法。其中， DiscoveryClient 实现了 EurekaClient接口并且它是单例模式，而 EurekaClient 继承了 LookupService 接口。
+a.在 DiscoveryClient 类中有一个服务注册的方法 register()，该方法通过 Http 请求 Eureka Server注册.
+b.在 DiscoveryClient 类下继续追踪 register() 方法 ，这个方法被 InstanceInfoReplicator 类的 run()方法调用，其中InstanceInfoReplicator 实现了 Runnable 接口。
+c.InstanceInfoReplicator 类是在 DiscoveryClient 初始化过程调用的， 其中有一个 initScheduledTasks() 方法 该方法主要开启了获取服务注册列表的信息。
+如果需要向 Eureka Server 注册，则开启注册，同时开启定时任务向 Eureka Server 服务续约。
+服务端：
+d.再来跟踪 Eureka Server 端的代码 Maven 的 eureka-core: 1.6.2的jar包下。打开 com.netflix.eureka 会发现有一个 EurekaBootStrap 的类，
+BootStrapContext 类在程序启动时具有最先初始化的权限。
+其中， PeerAwareInstanceRegistryImpl 和 PeerEurekaNodes 两个类从其命名上看，应该和服务注册以及 Eureka Server 高可用有关。
+先追踪 PeerAwareInstanceRegistryImpl 类，在该类中有一个 register() 方法，该方法提供了服务注册， 并且将服务注册信息同步到其他的 Eureka Server 服务中。
+点击其中的 super.register(info, leaseDuration, isReplication) 方法，进入其父类 AbstractInstanceRegistry 可以发现更多细节，
+注册列表信息被保存在 Map 中。AbstractInstanceRegistry 类的 replicateToPeers() 方法用于将注册列表信息同步到其他 Eureka Server 的其他 Peers 节点，
+追踪代码，发现该方法会循环遍历向所有的 Peers 节点注册， 最终执行类 PeerEurekaNodes 的 register() 方法,该方法通过执行一个任务向其他节点同步该注册信息。
+f.经过一系列的源码追踪，可以发现 PeerAwareInstanceRegistryImpl 的 register() 方法实现了服务的注册，并且向其他 Eureka Server 的 Peer 节点同步了该注册信息，
+那么 register() 方法被谁调用了呢？ 有关 Eureka Client 的分析中可以知道， Eureka Client 通过 Http 来向 Eureka Server 注册的，
+那么 Eureka Server 定会提供一个服务注册的 API 接口给 Eureka Client 调用，PeerAwareInstanceRegistryImpl 的 register() 方法最终肯定会被暴露 Http 接口所调用。
+在 IDEA 开发工具中，同时按住“Alt ”＋鼠标左键（查看某个类被谁调用的快捷键），可以很快定位到 ApplicationResource 类的 addInstance() 方法，即服务注册的接口。
+
+B.Renew 服务续约
+a.服务续约和服务注册非常相似，通过前文中的分析可以知道，服务注册在 Eureka Client 程序启动之后 ，并同时开启服务续约的定时任务。
+在eureka-client-1.6.2.jar 的 DiscoveryClient 的类下有 renew() 方法。
+另外， Eureka Server 的续约接口在 eureka-core: 1.6.2.jar com.netflix.eureka 包下的 InstanceResource 类下，接口方法为 renewLease() ，它是一个RESTful API 接口。
+b.读者可以跟踪 registry.renew 的代码继续深入研究，和追踪服务注册的源码类似，在此不再赘述。
+另外服务续约有两个参数是可以配置的，即 Eureka Client 发送续约心跳的时间参数和 Eureka Server 在多长时间内没有收到心跳将实例剔除的时间参数。
+在默认情况下，这两个分别为 30 秒和 90 秒，官方的建议是不要修改，如果有特殊需求还是可以调整的，
+只需要分别 Eureka Client 和 Eureka Server 的配置文件 application.yml 中加以下的配置：
+  eureka.instance.leaseRenewalIntervalInSeconds
+  eureka.instance.leaseExpirationDurationInSeconds
+
+C.为什么 Eureka Client 获取服务实例这么慢?
+a.Eureka Client 注册延迟
+Eureka Client 启动之后，不是立即向 Eureka Server 注册的，而是有一个延迟向服务端注册的时间。
+通过跟踪源码，可以发现默认的延迟时间为 40 秒，源码在 eureka-client-1.6.2.jar 的 DefaultEurekaClientConfig 类中。
+b.Eureka Server 的响应缓存
+Eureka Server 维护每 30s 更新一次响应缓存，可通过更改配置 eureka.server.responseCache UpdateIntervalMs 来修改。
+所以即使是刚刚注册的实例，也不会立即出现在服务注册列表中。
+c.Eureka Client 缓存
+Eureka Client 保留注册表信息的缓存。该缓存每 30 秒更新一次（如前所述）。因此，eureka Client 刷新本地缓存并发现其他新注册的实例可能需要 30 秒。
+d.LoadBalancer 缓存
+Ribbon 的负载平衡器从本地的 Eureka Client 获取服务注册列表信息。 Ribbon 本身还维护了缓存，以避免每个请求都需要从 Eureka Client 获取服务注册列表。
+此缓存每 30 秒刷新一次（可由 ribbon.ServerListRefreshInterval 置） ，所以可能至少需要 30 秒的时间才能使用新注册的实例。
+
+综上因素，一个新注册的实例，默认延迟 40 秒向服务注册中心注册，所以不能马上被 Eureka Server 发现。
+另外，刚注册的 Eureka Client 不能立即被其他服务调用，原因是调用方由于各种缓存没有及时获取到最新的服务注册列表信息。
+
+D.Eureka 的自我保护模式
+当有一个新的 Eureka Server 出现时，它尝试从相邻 Peer 节点获取所有服务实例注册表信息。如果从相邻 Peer 点获取信息时出现了故障 Eureka Server 会尝试其他的 Peer 节点。
+如果 Eureka Server 能够成功获取所有的服务实例信息，则根据配置信息设置服务续约的阀值。
+在任何时间，如果 Eureka Server 接收到的服务续约低于为该值配置的百分比（默认为 15 分钟内低于 85% ），
+则服务器开启自我保护模式，即不再剔除注册列表的信息这样做的好处在于，如果是 Eureka Server 自身的网络问题而导致 Eureka Client 无法续约，
+Eureka Client 注册列表信息不再被删除，也就是 Eureka Client 还可以被其他服务消费
+在默认情况下， Eureka Server 的自我保护模式是开启的,如果需要关闭，则在阳直文件添加以下代码：
+eureka:
+    server:
+        enable-self-preservation : false
+
+E.Eureka Server集群配置
+a.设置EurekaServerApplication右上角多开
+b.配置文件：
+    application-server1.yml 服务注册中心1
+    application-server2.yml 服务注册中心2
+c.修改 hosts
+修改 hosts 文件，以使 peer1 和 peer2 映射到 localhost，因为 eureka server 的主机名必须不同才可互相注册。
+因为是在本地搭建 Eureka Server 集群，所以需要修改本地的 host，
+Windows 系统的电脑C:\Windows\System32\drivers\etc\hosts 中修改， Mac 系统的电脑通过终端 vim/etc/hosts 进行编辑修改。
+    127.0.0.1 peer1
+    127.0.0.1 peer2
+d.启动 server1和server2 服务注册中心(maven中的profiles选项server1和server2)
+e.启动 eureka client 工程，访问 http://peer1:8761/
+发现 eureka-client 已向 peer1 节点的 Eureka Server 注册了， 并且在 DS Replicas 选项中显示了节点 peer2。
+这时 eureka-client 工程的配置文件中并没有指定向 peer2 的节点 Eureka Server 注册。
+访问 Eureka Server 的节点 peer2 主界面，界面的 Url 地址为 http://peer2:8760/。
+节点 peer2 主界面显示 Eureka Client 已经向 peer2 节点注册，可见 peer1 注册列表信息己经同步到 peer2 节点，

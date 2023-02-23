@@ -1,0 +1,104 @@
+1.RestTemplate简介
+RestTemplate 是 Spring Resources 中一个访问 RESTful API 接口的网络请求框架。
+RestTemplate 的设计原则和其他 Spring Template （例如 JdbcTemplate、JmsTemplate ）类似，都是为执行复杂任务提供了一个具有默认行为的简单方法。
+RestTemplate 是用来消费 REST 服务的，所以 RestTemplate 的主要方法都与 REST 的Http协议的一些方法紧密相连，例如 HEAD、GET、POST、PUT、DELETE、OPTIONS 等方法，
+这些方法在 RestTemplate 类对应的方法为 headForHeaders()、getForObject()、postForObject()、put()和 delete() 等。
+
+2.Ribbon 简介
+负载均衡是指将负载分摊到多个执行单元上，常见的负载均衡有两种方式。
+一种是独立进程单元，通过负载均衡策略，将请求转发到不同的执行单元上，例如 Ngnix 。
+另一种是将负载均衡逻辑以代码的形式封装到服务消费者的客户端上，服务消费者客户端维护了一份服务提供的信息列 ，有了信息列表，通过负载均衡策略将请求分摊给多个服务提供者，从而达到负
+载均衡的目的。
+Ribbon Netflix 公司开源的一个负载均衡的组件，它属于上述的第二种方式，是将负载均衡逻辑封装在客户端中，并且运行在客户端的进程里。
+Ribbon 是一个经过了云端测试的 IPC库，可以很好地控制 HTTP、TCP 客户端的负载均衡行为。
+在Spring Cloud 构建的微服务系统中， Ribbon 作为服务消费者的负载均衡器，有两种使用方式，
+一种是和 RestTemplate 相结合，另一种是和 Feign 相结合。
+Feign 已经默认集成了 Ribbon,关于 Feign 的内容将会在 eureka-feign 项目 思路进行详细讲解。
+Ribbon 有很多子模块，但很多模块没有用于生产环境，目前 Netflix 公司用于生产环境的 Ribbon子模块如下。
+    ribbon-loadbalancer ：可以独立使用或与其他模块一起使用的负载均衡器 API
+    ribbon-eureka ：Ribbon 结合 Eureka 客户端的 API ，为负载均衡器提供动态服务注册列表信息。
+    ribbon-core: Ribbon 的核心 API
+
+3.使用RestTemplate来消费服务
+a.启动 eureka-server 端口为 8761 。启动两个 eureka-client和 eureka-client2 实例，端口分别为 8762、8763
+启动完成后，在浏览器上访问 http: //localhost:8761 ，浏览器显示 eureka-client 的两个实例已成功向服务注册中心注册，它们的端口分别为 8762、8763
+b.再创建一个 Module 工程，取名为 eureka-ribbon-client ，其作为服务消费者，通过 RestTemplate 来远程调用 eureka-client 服务 API 接口的"/hi"，即消费服务
+c.创建完 eureka-ribbon-client 的 Module 工程之后，在其 pom 件中引入相关的依赖，包继承了主 Maven 程的 pom 文件，
+引入 Eureka Client 的起步依赖 spring-cloud-starter-eureka、Ribbon 的起步依赖 spring-cloud-starter-ribbon ，以及 Web 的起步依赖 spring-boot-starter-web。
+d.在工程的配置文件 application.yml 程序的相关配置 ，包括指定程序名为 eureka-ribbon-client，程序的端口号为 8764 ，服务注册地址为 http://localhost:8761/eureka/
+另外，作为 Eureka Client 需要在程序的入口类加上注解 @EnableEurekaClient 开启 Eureka Client 功能。
+e.写一个RESTful API 接口，在该 API 接口内部需要调用 eureka-client API 接口 "/hi"，即服务消费。
+由于 eureka-client 为两个实例，它们的端口为 8762、8763 。在调用 eureka-client API 接口 "/hi" 时希望做到轮流访问这两个实例，这时就需要将 RestTemplate 和 Ribbon
+结合，进行负载均衡。
+通过查阅官方文档，可以知道如何将它们结合在一起，只需要在程序的 IoC 容器中注入 restTemplate 的 Bean 并在这个 Bean 上加上@LoadBalanced 注解，
+此时 RestTemplate 就结合了 Ribbon 开启了负载均衡功能。
+f.写一个RibbonService 类，在该类的 hi() 方法用 restTemplate 调用 eureka client 的 API 接口，此时 Url 上不需要使用硬编码（例如 地址），只需要写服务名 eureka-client 即可。
+写一个 RibbonController ，为该类加上@RestController 注解，开启 RestController 的功能，
+写一个"/hi" Get方法的接口，调用 RibbonService 类的 hi()方法
+g.启动 eureka-ribbon-client 工程,在浏览器上访问地址 http://localhost:8764/hi?name=eureka-ribbon-client
+结果：ribbon负载均衡来回切换(restTemplate方式 Restful)
+      hi eureka-ribbon-client,port:8762
+      hi eureka-ribbon-client,port:8763
+
+4.LoadBalancerClient 简介
+负载均衡器的核心类为 LoadBalancerClient, LoadBalancerClient 可以获取负载均衡的服务提供者的实例信息。为了演示，在 RibbonController 重新写一个接口“testRibbon”，
+通过 LoadBalancerClient 去选择 eureka-client 的服务实例的信息 并将该信息返回。
+浏览器上多次访问 http://localhost:8764/testRibbon 浏览器会轮流显示如下内容：
+      localhost:8762
+      localhost:8763
+可见， LoadBalancerClient 的choose("eureka-client")方法可以轮流得到 eureka-client 的两个服务实例的信息。
+那么负载均衡器是怎么获取到这些客户端的信息的呢？查看官方文档可以知道，负载均衡器LoadBalancerClient 是从 Eureka Client 获取服务注册列表信息的，并将服务注册列表信息缓存。
+在 LoadBalancerClient 调用 choose() 方法时，根据负载均衡策略选择一个服务实例的信息，从而进行了负载均衡。
+LoadBalancerClient 也可以不从 Eureka Client 获取注册列表信息，这时需要自己维护一份服务注册列表信息。
+通过配置 ribbon.eureka.enable 为 false 禁止调用 Eureka Client 获取注册列表 在配置文件 application.yml 中有一个程序名为 stores的服务，
+有两个不同 Url 地址 （例如 example.com 和 google.com ）的服务实例 ，通stores.ribbon.listOfServers 来配置这些服务实例的 Url。
+
+SO,在 Ribbon 中的负载均衡客户端为 LoadBalancerClient 。在 Spring Cloud项目中，负载均衡器 Ribbon 会默认从 Eureka Client 的服务注册列表中获取服务的信息，并缓存一份。
+根据缓存的服务注册列表信息，可以通过 LoadBalancerClient 来选择不同的服务实例，从而实现负载均衡。
+如果禁止 Ribbon Eureka 获取注册列表信息，则需要自己去维护一份服务注册列表信息。 根据自己维护服务注册列表的信息， Ribbon 也可以实现负载均衡。
+
+5.源码解析
+a.跟踪 LoadBalancerClient 的源码，它是一个接口类，继承了 ServiceInstanceChooser ，它的实现类为 RibbonLoadBalanceClient。
+LoadBalancerClient 是一个负载均衡的客户端，有如下3种方法。其中有2个 execute()方法，均用来执行请求， reconstructURI()用于重构 Url。
+ServiceInstanceChooser 接口有一个方法用于根据 serviceId 获取 ServiceInstance ，即通过服务名来选择服务实例。
+LoadBalancerClient 的实现类为 RibbonLoadBalancerClient。RibbonLoadBalancerClient 是一个非常重要的类，最终的负载均衡的请求处理由它来执行。
+b.在 RibbonLoadBalancerClient 的源码中 choose() 方法用于选择具体服务实例。该方法通过 getServer() 方法去获取实例,经过源码跟踪，最终交给 ILoadBalancer 类去选择服务实例。
+ILoadBalancer 在 ribbon-loadbalancer 的 jar 包下，ILoadBalancer 是一个接口，该接口定义了一系列实现负载均衡的方法。
+其中，addServers() 方法用于添加一个 Server 集合， chooseServer() 方法用于根据 key 去获取 Server, markServerDown() 方法用于标记某个服务下线,
+getReachableServers() 获取可用的 Server 集合，getAllServers() 获取所有的 Server 集合。
+ILoadBalancer 子类 BaseLoadBalancer, BaseLoadBalancer 的实现类为 DynamicServerListLoadBalancer。
+c.查看 DynamicServerListLoadBalancer 类的源码， DynamicServerListLoadBalancer 需要配置 IClientConfig,、IRule、IPing、ServerList、ServerListFilter 和 ILoadBalancer。
+查看 BaseLoadBalancer 类的源码，在默认的情况下， 实现了如下配置。
+    D IClientConfig ribbonClientConfig: DefaultClientConfigImpl
+    D IRule ribbonRule: RoundRobinRule
+    D IPing ribbonPing: DummyPing
+    D ServerList ribbonServerList: ConfigurationBasedServerList
+    D ServerListFilter ribbonServerListFilter: ZonePreferenceServerListFilter
+    D ILoadBalancer ribbonLoadBalancer: ZoneAwareLoadBalancer
+d.IClientConfig 用于配置负载均衡客户端，IClientConfig 的默认实现类为 DefaultClientConfigImpl。
+IRule 用于配置负载均衡的策略，IRule 有3个方法，其中 choose() 是根据 key 来获取 server 实例的，setLoadBalancer() 和 getLoadBalancer() 是用来设置和获取 ILoadBalancer 的。
+IRule 有很多默认的实现类，这些实现类根据不同的算法和逻辑来处理负载均衡的策略。IRule 默认实现类有以下7种 。在大多数情况下，这些默认的实现类是可以满足需求的，
+如果有特殊的需求，可以自己实现。
+    BestAvailableRule 选择最小请求数
+    ClientConfigEnabledRoundRobinRule 轮询
+    RandomRule 随机选择一个server
+    RoundRobinRule 轮询选择 server
+    RetryRule 根据轮询的方式重试
+    WeightedResponseTimeRule 根据响应时间去分配 weight , weight 越低，被选择的可能性就越低
+    ZoneAvoidanceRule ：根据 server 的 zone 区域和可用性来轮询选择
+e.IPing 用于向 server 发送 "ping"，来判断 server 是否有响应 ，从而判断 server 是否可用。它有 isAlive() 方法。
+IPing 类有 PingUrl、PingConstant、NoOpPing、DummyPing 和 NIWSDiscoveryPing
+    Ping Url 真实地去 ping 某个 Url ，判断其是否可用。
+    PingConstant 固定返回某服务是否可用，默认返回 true，即可用。
+    NoOpPing 不 ping 直接返回 true ，即可用。
+    DummyPing 直接返回 true 并实现了 initWithNiwsConfig 方法。
+    NIWSDiscoveryPing ：根据 DiscoveryEnabledServer 的 InstanceInfo 的 InstanceStatus 去判断，如果为 InstanceStatus.UP ，则可用，则不可用。
+f.Server List 是定义获取所有 server 注册列表信息的接口，ServerListFilter 接口定义了可根据配置去过滤或者特性动态地获取符合条件的 server方法。
+
+6.Ribbon 负载均衡主要是通过 LoadBalancerClient 来实现的，而 LoadBalancerClient 具体交给了 ILoadBalancer 来处理， ILoadBalancer 通过配置IRule、IPing ，
+  向 EurekaClient获取注册列表的信息，默认 10 秒向 EurekaClient 发送一次“ping ”， 进而检查是否需要更新服务的注册列表信息。
+  最后 ，在得到服务注册列表信息后， ILoadBalancer 根据IRule 策略进行负载均衡。
+
+  而RestTemplate 加上@LoadBalance 注解后，在远程调度时能够负载均衡， 主要是维护了一个被@LoadBalance 注解的 RestTemplate 列表，
+  并给该列表中 RestTemplate 象添加了拦截器。在拦截器的方法中 ，将远程调度方法交给了 Ribbon 负载均衡器 LoadBalancerClient去处理
+  ，从而达到了负载均衡的目的.

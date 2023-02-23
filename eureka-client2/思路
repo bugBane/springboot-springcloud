@@ -1,0 +1,5 @@
+在浏览器上访问http://localhost:8761 ,eureka-client 有两个实例，端口为 8762 8763
+目的：启动一个相同的服务，只是改动了port为8763，为了展示ribbon的负载均衡功能
+
+Application	    AMIs	    Availability Zones	    Status
+EUREKA-CLIENT	n/a (2)	    (2)	                    UP (2) - localhost:eureka-client:8763 , localhost:eureka-client:8762

@@ -1,0 +1,20 @@
+# Eureka Server 集群配置 server1
+server:
+  port: 8761
+
+eureka:
+  instance:
+    hostname: peer1
+  client:
+#    默认
+#    registerWithEureka: true
+#    fetchRegistry: true
+    serviceUrl:
+      defaultZone:
+        http://peer2:8760/eureka/
+
+spring:
+  application:
+    name: eureka-server
+
+#  profiles: server1

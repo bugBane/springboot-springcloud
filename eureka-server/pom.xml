@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.cloud</groupId>
+        <artifactId>main</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+    <groupId>com.cloud</groupId>
+    <artifactId>eureka-server</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>eureka-server</name>
+
+    <dependencies>
+
+        <!--eureka-server依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-eureka-server</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--用于 spring boot 项目的打包（package）阶段-->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <!--开启过滤，用指定的参数替换directory下的文件中的参数 @profiles.active@-->
+                <filtering>true</filtering>
+<!--                <excludes>-->
+<!--                    <exclude>application-*.yml</exclude>-->
+<!--                    &lt;!&ndash;<exclude>dev/*</exclude>&ndash;&gt;&lt;!&ndash;打包的时候排除特定文件下的文件&ndash;&gt;-->
+<!--                </excludes>-->
+                <includes>
+                    <!--打包的时候包含特定文件下的文件-->
+                    <include>application.yml</include>
+                    <include>application-${profiles.active}.yml</include>
+                </includes>
+            </resource>
+        </resources>
+    </build>
+    <!--Eureka Server单机和集群配置-->
+    <profiles>
+        <profile>
+            <!-- 单机环境 single -->
+            <id>single</id>
+            <properties>
+                <profiles.active>single</profiles.active>
+            </properties>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+        <profile>
+            <!-- 集群环境 server1 -->
+            <id>server1</id>
+            <properties>
+                <profiles.active>server1</profiles.active>
+            </properties>
+        </profile>
+        <profile>
+            <!-- 集群环境 server2 -->
+            <id>server2</id>
+            <properties>
+                <profiles.active>server2</profiles.active>
+            </properties>
+        </profile>
+    </profiles>
+</project>
